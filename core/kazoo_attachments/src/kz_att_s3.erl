@@ -136,6 +136,7 @@ decode_retrieval(S3) ->
 
 -spec put_attachment(map(), ne_binary(), ne_binary(), ne_binary(), ne_binary(), kz_data:options()) -> any().
 put_attachment(Params, DbName, DocId, AName, Contents, _Options) ->
+    lager:notice("kz_att_s3.put_attachment \\o/"),
     {Bucket, FilePath, Config} = aws_bpc(Params, {DbName, DocId, AName}),
     case put_object(Bucket, FilePath, Contents, Config) of
         {'ok', Props} ->

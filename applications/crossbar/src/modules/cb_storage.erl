@@ -162,7 +162,9 @@ resource_exists(?PLANS_TOKEN, _PlanId) -> 'true'.
 %%--------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
-    validate_storage(set_scope(Context), cb_context:req_verb(Context)).
+    ReqVerb = cb_context:req_verb(Context),
+    Context1 = validate_storage(set_scope(Context), ReqVerb),
+    maybe_check_storage_credentials(Context1, ReqVerb).
 
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ?PLANS_TOKEN) ->
@@ -412,3 +414,49 @@ doc_id({'user', UserId, _AccountId}) -> UserId;
 doc_id({'reseller_plans', _AccountId}) -> 'undefined';
 doc_id({'reseller_plan', PlanId, _AccountId}) -> PlanId;
 doc_id(Context) -> doc_id(scope(Context)).
+
+-spec maybe_check_storage_credentials(cb_context:context(), ne_binary()) -> cb_context:context().
+maybe_check_storage_credentials(Context, ReqVerb) when ReqVerb =:= ?HTTP_PUT;
+                                                       ReqVerb =:= ?HTTP_POST;
+                                                       ReqVerb =:= ?HTTP_PATCH ->
+    case cb_context:resp_status(Context) of
+      'success' ->
+        Doc = cb_context:doc(Context),
+        lager:info("Doc: ~p", [Doc]),
+        RespData = cb_context:resp_data(Context),
+        DbName = cb_context:account_db(Context),
+        DocId = doc_id(Context),
+        AName = <<"test_credentials_file.txt">>,
+        Contents = kz_binary:rand_hex(16),
+        Atts = kz_json:get_value(<<"attachments">>, RespData),
+        lager:info("Data: ~p~nDbName: ~p~nDocId: ~p~nAName: ~p~nContents: ~p~n, Atts: ~p",
+                   [RespData, DbName, DocId, AName, Contents, Atts]),
+        NewContext =
+        kz_json:foldl(
+          fun(_AttId, Att, Acc) ->
+              Handler = kz_json:get_value(<<"handler">>, Att),
+              %Opts = kz_json:encode(#{handler => Handler
+              %                       ,settings => kz_json:get_value(<<"settings">>, Att)
+              %                       }),
+              Options = kz_json:to_proplist(Att),
+              case kz_datamgr:put_attachment(DbName, DocId, AName, Contents, Options) of
+                {ok, _} ->
+                  Acc;
+                _ ->
+                  ErrorMsg = <<Handler/binary, " credentials are invalid.">>,
+                  cb_context:add_validation_error(<<"attachments">>
+                                                 ,<<"forbidden">>
+                                                 ,ErrorMsg
+                                                 , Acc
+                                                 )
+              end
+          end,
+          Context,
+          Atts),%;
+        lager:info("NewContext: ~p~nNewRespData: ~p", [NewContext, cb_context:resp_data(NewContext)]),
+        NewContext;
+      _ ->
+        Context
+    end;
+maybe_check_storage_credentials(Context, _ReqVerb) ->
+    Context.
