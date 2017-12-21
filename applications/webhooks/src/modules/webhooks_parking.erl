@@ -85,8 +85,7 @@ maybe_send_event(AccountId, JObj) ->
 format(JObj) ->
     AccountId = kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     JObj1 = kz_json:set_value(<<"Account-ID">>, AccountId, JObj),
-    RemoveKeys = [
-                  <<"Node">>
+    RemoveKeys = [<<"Node">>
                  ,<<"Msg-ID">>
                  ,<<"App-Version">>
                  ,<<"App-Name">>

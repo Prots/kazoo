@@ -34,7 +34,7 @@
        ).
 -define(RESPONDERS
        ,[{{?MODULE, 'handle_event'}
-         ,[{<<"notification">>, ?NAME}
+         ,[{<<"notification">>, <<"outbound_fax">>}
           ,{<<"notification">>, <<"outbound_fax_error">>}
           ]
          }
@@ -45,10 +45,7 @@
 init() ->
     webhooks_util:init_metadata(?ID, ?METADATA).
 
--spec bindings_and_responders() ->
-                                     {gen_listener:bindings()
-                                     ,gen_listener:responders()
-                                     }.
+-spec bindings_and_responders() -> {gen_listener:bindings(), gen_listener:responders()}.
 bindings_and_responders() ->
     {?BINDINGS, ?RESPONDERS}.
 
@@ -58,7 +55,7 @@ handle_event(JObj, Props) ->
     EventName = kz_json:get_value(<<"Event-Name">>, JObj),
     handle_event(JObj, Props, EventName).
 
-handle_event(JObj, _Props, ?NAME = EventName) ->
+handle_event(JObj, _Props, <<"outbound_fax">> = EventName) ->
     'true' = kapi_notifications:fax_outbound_v(JObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     Formatted = format_outbound_fax_event(JObj),
@@ -67,7 +64,7 @@ handle_event(JObj, _Props, <<"outbound_fax_error">>) ->
     'true' = kapi_notifications:fax_outbound_error_v(JObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     Formatted = format_outbound_fax_event(JObj),
-    maybe_send_event(?NAME, AccountId, Formatted).
+    maybe_send_event(<<"outbound_fax">>, AccountId, Formatted).
 
 -spec maybe_send_event(ne_binary(), api_binary(), kz_json:object()) -> 'ok'.
 maybe_send_event(_EventName, 'undefined', _JObj) -> 'ok';

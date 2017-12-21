@@ -27,10 +27,7 @@
 init() ->
     webhooks_util:init_metadata(?ID, ?METADATA).
 
--spec bindings_and_responders() ->
-                                     {gen_listener:bindings()
-                                     ,gen_listener:responders()
-                                     }.
+-spec bindings_and_responders() -> {gen_listener:bindings(), gen_listener:responders()}.
 bindings_and_responders() ->
     {[{'self', []}]
     ,[{{?MODULE, 'handle_event'}

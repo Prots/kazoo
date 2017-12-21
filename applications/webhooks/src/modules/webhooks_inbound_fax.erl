@@ -15,7 +15,7 @@
 
 -define(ID, kz_term:to_binary(?MODULE)).
 -define(NAME, <<"Inbound Fax">>).
--define(DESC, <<"This webhook is triggered when an inbound fax is recieved or if there is an error during an attempt">>).
+-define(DESC, <<"This webhook is triggered when an inbound fax is received or if there is an error during an attempt">>).
 -define(METADATA
        ,kz_json:from_list([{<<"_id">>, ?ID}
                           ,{<<"name">>, ?NAME}
@@ -34,7 +34,7 @@
        ).
 -define(RESPONDERS
        ,[{{?MODULE, 'handle_event'}
-         ,[{<<"notification">>, ?NAME}
+         ,[{<<"notification">>, <<"inbound_fax">>}
           ,{<<"notification">>, <<"inbound_fax_error">>}
           ]
          }
@@ -45,10 +45,7 @@
 init() ->
     webhooks_util:init_metadata(?ID, ?METADATA).
 
--spec bindings_and_responders() ->
-                                     {gen_listener:bindings()
-                                     ,gen_listener:responders()
-                                     }.
+-spec bindings_and_responders() -> {gen_listener:bindings(), gen_listener:responders()}.
 bindings_and_responders() ->
     {?BINDINGS, ?RESPONDERS}.
 
@@ -58,7 +55,7 @@ handle_event(JObj, Props) ->
     EventName = kz_json:get_value(<<"Event-Name">>, JObj),
     handle_event(JObj, Props, EventName).
 
-handle_event(JObj, _Props, ?NAME = EventName) ->
+handle_event(JObj, _Props, <<"inbound_fax">> = EventName) ->
     'true' = kapi_notifications:fax_inbound_v(JObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     Formatted = format_inbound_fax_event(JObj),
@@ -67,7 +64,7 @@ handle_event(JObj, _Props, <<"inbound_fax_error">>) ->
     'true' = kapi_notifications:fax_inbound_error_v(JObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     Formatted = format_inbound_fax_event(JObj),
-    maybe_send_event(?NAME, AccountId, Formatted).
+    maybe_send_event(<<"inbound_fax">>, AccountId, Formatted).
 
 -spec maybe_send_event(ne_binary(), api_binary(), kz_json:object()) -> 'ok'.
 maybe_send_event(_EventName, 'undefined', _JObj) -> 'ok';
