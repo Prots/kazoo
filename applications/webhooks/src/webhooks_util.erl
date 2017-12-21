@@ -588,19 +588,13 @@ init_metadata(Id, JObj) ->
 
 -spec init_metadata(ne_binary(), kz_json:object(), ne_binary()) -> 'ok'.
 init_metadata(Id, JObj, MasterAccountDb) ->
-    case metadata_exists(MasterAccountDb, Id) of
+    case kz_datamgr:open_doc(MasterAccountDb, Id) of
         {'error', _} -> load_metadata(MasterAccountDb, JObj);
         {'ok', Doc} ->
             lager:debug("~s already exists, updating", [Id]),
             Merged = kz_json:merge(Doc, JObj),
             load_metadata(MasterAccountDb, Merged)
     end.
-
--spec metadata_exists(ne_binary(), ne_binary()) ->
-                             {'ok', kz_json:object()} |
-                             kz_datamgr:data_error().
-metadata_exists(MasterAccountDb, Id) ->
-    kz_datamgr:open_doc(MasterAccountDb, Id).
 
 -spec load_metadata(ne_binary(), kz_json:object()) -> 'ok'.
 load_metadata(MasterAccountDb, JObj) ->
@@ -611,9 +605,7 @@ load_metadata(MasterAccountDb, JObj) ->
         {'error', 'conflict'} ->
             lager:debug("~s loaded elsewhere", [kz_doc:id(JObj)]);
         {'error', _E} ->
-            lager:warning("failed to load metadata for ~s: ~p"
-                         ,[kz_doc:id(JObj), _E]
-                         )
+            lager:warning("failed to load metadata for ~s: ~p", [kz_doc:id(JObj), _E])
     end.
 
 -define(AVAILABLE_EVENT_KEY, 'available_events').
