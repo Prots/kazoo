@@ -63,6 +63,21 @@
         ,validate_message/4
         ]).
 
+%% #kapi_definition accessors
+-export([definition_name/1
+        ,definition_friendly_name/1
+        ,definition_description/1
+        ,definition_build_fun/1
+        ,definition_validate_fun/1
+        ,definition_publish_fun/1
+        ,definition_binding/1
+        ,definition_restrict_to/1
+        ,definition_required_headers/1
+        ,definition_optional_headers/1
+        ,definition_values/1
+        ,definition_types/1
+        ]).
+
 -include_lib("amqp_util.hrl").
 
 -ifdef(TEST).
@@ -597,3 +612,39 @@ exec_fold({F, K, V}, C) when is_function(F, 3) -> F(K, V, C);
 exec_fold({F, V}, C) when is_function(F, 2) -> F(V, C);
 exec_fold(F, C) when is_function(F, 1) -> F(C);
 exec_fold(_, C) -> C.
+
+-spec definition_name(kapi_definition()) -> ne_binary().
+definition_name(#kapi_definition{name = Name}) -> Name.
+
+-spec definition_friendly_name(kapi_definition()) -> ne_binary().
+definition_friendly_name(#kapi_definition{friendly_name = FreindlyName}) -> FreindlyName.
+
+-spec definition_description(kapi_definition()) -> ne_binary().
+definition_description(#kapi_definition{description = Description}) -> Description.
+
+-spec definition_build_fun(kapi_definition()) -> fun((api_terms()) -> api_formatter_return()).
+definition_build_fun(#kapi_definition{build_fun = BuildFun}) -> BuildFun.
+
+-spec definition_validate_fun(kapi_definition()) -> fun((api_terms()) -> boolean()).
+definition_validate_fun(#kapi_definition{validate_fun = ValidateFun}) -> ValidateFun.
+
+-spec definition_publish_fun(kapi_definition()) -> fun((api_terms()) -> api_formatter_return()).
+definition_publish_fun(#kapi_definition{publish_fun = PublishFun}) -> PublishFun.
+
+-spec definition_binding(kapi_definition()) -> api_ne_binary().
+definition_binding(#kapi_definition{binding = Binding}) -> Binding.
+
+-spec definition_restrict_to(kapi_definition()) -> api_atom().
+definition_restrict_to(#kapi_definition{restrict_to = RestrictTo}) -> RestrictTo.
+
+-spec definition_required_headers(kapi_definition()) -> api_headers().
+definition_required_headers(#kapi_definition{required_headers = ReqH}) -> ReqH.
+
+-spec definition_optional_headers(kapi_definition()) -> api_headers().
+definition_optional_headers(#kapi_definition{optional_headers = OptH}) -> OptH.
+
+-spec definition_values(kapi_definition()) -> api_valid_values().
+definition_values(#kapi_definition{values = Values}) -> Values.
+
+-spec definition_types(kapi_definition()) -> api_types().
+definition_types(#kapi_definition{types = Types}) -> Types.
