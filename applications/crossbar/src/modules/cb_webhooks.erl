@@ -86,7 +86,7 @@ maybe_revise_schema(MasterDb, SchemaJObj) ->
         {'error', _E} ->
             lager:warning("failed to find registered webhooks: ~p", [_E]);
         {'ok', Hooks} ->
-            revise_schema(SchemaJObj, [kz_json:get_value(<<"key">>, Hook) || Hook <- Hooks])
+            revise_schema(SchemaJObj, [kz_doc:id(Hook) || Hook <- Hooks])
     end.
 
 -spec revise_schema(kz_json:object(), ne_binaries()) -> 'ok'.
@@ -359,9 +359,10 @@ summary_available(Context) ->
 -spec normalize_available(kz_json:object(), kz_json:objects()) ->
                                  kz_json:objects().
 normalize_available(JObj, Acc) ->
-    case kz_json:get_value(<<"key">>, JObj) of
-        <<"skel">> -> Acc;
-        Name -> [kz_doc:set_id(kz_json:get_value(<<"doc">>, JObj), Name) | Acc]
+    case kz_doc:id(JObj) of
+        <<"webhooks_skel">> -> Acc;
+        <<"webhooks_", Id/binary>> -> [kz_doc:set_id(kz_json:get_value(<<"doc">>, JObj), Id) | Acc];
+        Id -> [kz_doc:set_id(kz_json:get_value(<<"doc">>, JObj), Id) | Acc]
     end.
 
 -spec summary_attempts(cb_context:context(), api_ne_binary()) -> cb_context:context().

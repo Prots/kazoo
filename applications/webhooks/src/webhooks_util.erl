@@ -149,20 +149,14 @@ fire_hooks(JObj, [Hook | Hooks]) ->
 maybe_fire_hook(JObj, #webhook{modifiers='undefined'}=Hook) ->
     fire_hook(JObj, Hook);
 maybe_fire_hook(JObj, #webhook{modifiers=Modifiers}=Hook) ->
-    {ShouldFireHook, _} =
-        kz_json:foldl(
-          fun maybe_fire_foldl/3
-                     ,{'true', JObj}
-                     ,Modifiers
-         ),
-    case ShouldFireHook of
-        'false' -> 'ok';
-        'true' ->  fire_hook(JObj, Hook)
+    case kz_json:foldl(fun maybe_fire_foldl/3, {'true', JObj}, Modifiers) of
+        {'false', _} -> 'ok';
+        {'true', _} ->  fire_hook(JObj, Hook)
     end.
 
 -type maybe_fire_acc() :: {boolean(), kz_json:object()}.
--spec maybe_fire_foldl(ne_binary(), any(), maybe_fire_acc()) ->
-                              maybe_fire_acc().
+-spec maybe_fire_foldl(ne_binary(), any(), maybe_fire_acc()) -> maybe_fire_acc().
+
 maybe_fire_foldl(_Key, _Value, {'false', _}=Acc) ->
     Acc;
 maybe_fire_foldl(_Key, [], Acc) -> Acc;
@@ -374,9 +368,9 @@ hook_id(AccountId, Id) ->
     <<AccountId/binary, ".", Id/binary>>.
 
 -spec hook_event(ne_binary()) -> ne_binary().
--spec hook_event_lowered(ne_binary()) -> ne_binary().
 hook_event(Bin) -> hook_event_lowered(kz_term:to_lower_binary(Bin)).
 
+-spec hook_event_lowered(ne_binary()) -> ne_binary().
 hook_event_lowered(<<"channel_create">>) -> <<"CHANNEL_CREATE">>;
 hook_event_lowered(<<"channel_answer">>) -> <<"CHANNEL_ANSWER">>;
 hook_event_lowered(<<"channel_destroy">>) -> <<"CHANNEL_DESTROY">>;
@@ -397,9 +391,10 @@ load_hooks(Srv) ->
         {'ok', []} ->
             lager:debug("no configured webhooks");
         {'ok', WebHooks} ->
-            load_hooks(Srv, WebHooks);
+            {NeedMigrate, WHs} = maybe_need_migrate(WebHooks),
+            load_hooks(Srv, WHs);
         {'error', 'not_found'} ->
-            lager:debug("db or view not found, initing"),
+            lager:debug("db or view not found, initializing"),
             init_webhook_db(),
             load_hooks(Srv);
         {'error', _E} ->
@@ -412,6 +407,9 @@ init_webhook_db() ->
     _ = kz_datamgr:revise_doc_from_file(?KZ_WEBHOOKS_DB, 'crossbar', <<"views/webhooks.json">>),
     _ = kz_datamgr:revise_doc_from_file(?KZ_SCHEMA_DB, 'crossbar', <<"schemas/webhooks.json">>),
     'ok'.
+
+maybe_need_migrate(WebHooks) ->
+
 
 -spec load_hooks(pid(), kz_json:objects()) -> 'ok'.
 load_hooks(Srv, WebHooks) ->

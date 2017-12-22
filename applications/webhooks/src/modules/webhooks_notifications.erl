@@ -3,7 +3,6 @@
 %%%
 %%% @contributors
 %%%-------------------------------------------------------------------
-
 -module(webhooks_notifications).
 
 -export([init/0
@@ -13,7 +12,18 @@
         ]).
 
 -include("webhooks.hrl").
--include_lib("kazoo_amqp/include/kapi_conf.hrl").
+
+-define(ID, kz_term:to_binary(?MODULE)).
+-define(NAME, <<"Notifications Webhook">>).
+-define(DESC, <<"Fire a webhook when a notification event is triggered in Kazoo">>).
+
+-define(METADATA(Modifiers)
+       ,kz_json:from_list([{<<"_id">>, ?ID}
+                          ,{<<"name">>, ?NAME}
+                          ,{<<"description">>, ?DESC}
+                          ,{<<"modifiers">>, Modifiers}
+                          ])
+       ).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -22,18 +32,20 @@
 %%--------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
-    init(get_notifications_metadata()).
+    init(get_notifications_definition(), []).
 
--spec init([]) -> 'ok'.
-init([]) -> 'ok';
-init([Metadata|Rest]) ->
-    Id = kapi_notifications:metadata_type(Metadata),
-    Props = [{<<"category">>, kapi_notifications:metadata_category(Metadata)},
-            ,{<<"name">>, kapi_notifications:metadata_friendly_name(Metadata)}
-            ,{<<"description">>, kapi_notifications:metadata_description(Metadata)},
+-spec init(kz_api:kapi_definitions(), kz_json:objects()) -> 'ok'.
+init([], Acc) ->
+    _ = webhooks_util:init_metadata(?ID, ?METADATA(Acc)),
+    'ok';
+init([EventDefinition|Rest], Acc) ->
+    Props = [{kz_api:definition_name(EventDefinition)
+             ,[{<<"friendly_name">>, kz_api:definition_friendly_name(EventDefinition)}
+              ,{<<"description">>, kz_api:definition_description(EventDefinition)}
+              ]
+             }
             ],
-    _ = webhooks_util:init_metadata(Id, kz_json:from_list(Props)),
-    init(Rest).
+    init(Rest, [kz_json:from_list_recursive(Props) | Acc]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -51,8 +63,15 @@ bindings_and_responders() ->
 
 -spec bindings() -> gen_listener:bindings().
 bindings() ->
-    Restrictions = [kapi_notifications:metadata_restrict_to(Metadata) || Metadata <- get_notifications_metadata()],
-    [{'notifications', [{'restrict_to', Restrictions}]}].
+    RestrictTo =
+    [{'notifications', [{'restrict_to'
+                        ,[kz_api:definition_restrict_to(Definition)
+                          || Definition <- get_notifications_definition()
+                         ]
+                        }
+                       ]
+     }
+    ].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -67,44 +86,51 @@ account_bindings(_AccountId) -> [].
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec handle_event(kz_json:object(), kz_proplist()) -> any().
+-spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_event(JObj, _Props) ->
     lager:debug("got event: ~p", [JObj]),
     kz_util:put_callid(JObj),
-    %% Need a way to validate the notification payload
+
+    EventName = kz_api:event_name(JObj),
+    EventDefinition = kapi_notifications:api_definition(EventName),
+
+    Validate = kz_api:definition_validate_fun(EventDefinition),
+    'true' = Validate(JObj),
 
     AccountId = kapi_notifications:account_id(JObj),
-    case webhooks_util:find_webhooks(?NAME, AccountId) of
+    case webhooks_util:find_webhooks(?ID, AccountId) of
         [] ->
-            lager:debug("no hooks to handle ~s for ~s"
-                       ,[kz_api:event_name(JObj), AccountId]
-                       );
+            lager:debug("no hooks to handle ~s for ~s", [EventName, AccountId]);
         Hooks ->
-            Event = format_event(JObj, AccountId),
-            Type = kz_api:event_name(JObj),
-            Filtered = [Hook || Hook <- Hooks, match_action_type(Hook, Type)],
+            Event = kz_json:normalize(JObj),
+            Filtered = [Hook || Hook <- Hooks, match_action_type(Hook, EventName)],
+
+            %% FIXME: should we sent notify_update? if yes how to send it when hooks successfully fired?
             webhooks_util:fire_hooks(Event, Filtered)
     end.
 
 -spec match_action_type(webhook(), api_binary()) -> boolean().
-match_action_type(#webhook{hook_event = ?NAME
+match_action_type(#webhook{hook_event = <<"webhooks_notifications">>
                           ,custom_data='undefined'
-                          }, _Type) -> 'true';
-match_action_type(#webhook{hook_event = ?NAME
+                          }, _Type) ->
+    'true';
+match_action_type(#webhook{hook_event = <<"webhooks_notifications">>
                           ,custom_data=JObj
                           }, Type) ->
-    kz_json:get_value(<<"type">>, JObj) =:= Type;
-match_action_type(#webhook{}, _Type) -> 'true'.
-
--spec format_event(kz_json:object(), ne_binary()) -> kz_json:object().
-format_event(JObj, _AccountId) ->
-    kz_json:normalize(JObj).
+    kz_json:get_value(<<"type">>, JObj) =:= Type
+        orelse kz_json:get_value(<<"type">>, JObj) =:= <<"all">>;
+match_action_type(#webhook{}, _Type) ->
+    'true'.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec get_notification_metadata() -> kapi_notifications:metadata().
-get_notifications_metadata() ->
-    [Metadata || Metadata <- kapi_notifications:metadata(), kapi_notifications:metadata_category() /= <<"internal">>].
+-spec get_notifications_definition() -> kz_api:kapi_definitions().
+get_notifications_definition() ->
+    [Definition
+     || Definition <- kapi_notifications:api_definitions(),
+                      kz_api:definition_name(Definition) =/= <<"skel">>,
+                      kz_api:definition_name(Definition) =/= <<"notify_update">>
+    ].

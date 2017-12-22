@@ -54,10 +54,7 @@ init_master_account_db() ->
     end.
 
 init_master_account_db(MasterAccountDb) ->
-    _ = kz_datamgr:revise_doc_from_file(MasterAccountDb
-                                       ,'webhooks'
-                                       ,<<"webhooks.json">>
-                                       ),
+    _ = kz_datamgr:revise_doc_from_file(MasterAccountDb, 'webhooks', <<"webhooks.json">>),
     lager:debug("loaded view into master db ~s", [MasterAccountDb]).
 
 -spec init_modules() -> 'ok'.

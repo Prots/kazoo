@@ -280,7 +280,7 @@ service_added_definition() ->
                     }.
 
 %%% Transaction and Top-up common optional headers
--define(COMMON_TRANSACTION_HEADERS, [<<"Add-Ons">>,
+-define(COMMON_TRANSACTION_HEADERS, [<<"Add-Ons">>
                                     ,<<"Billing-Address">>
                                     ,<<"Card-Last-Four">>
                                     ,<<"Currency-Code">>

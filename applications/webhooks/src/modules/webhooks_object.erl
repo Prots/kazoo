@@ -106,13 +106,15 @@ handle_event(JObj, _Props) ->
 -spec match_action_type(webhook(), api_binary(), api_binary()) -> boolean().
 match_action_type(#webhook{hook_event = ?NAME
                           ,custom_data='undefined'
-                          }, _Action, _Type) -> 'true';
+                          }, _Action, _Type) ->
+    'true';
 match_action_type(#webhook{hook_event = ?NAME
                           ,custom_data=JObj
                           }, Action, Type) ->
     kz_json:get_value(<<"action">>, JObj) =:= Action
         andalso kz_json:get_value(<<"type">>, JObj) =:= Type;
-match_action_type(#webhook{}, _Action, _Type) -> 'true'.
+match_action_type(#webhook{}, _Action, _Type) ->
+    'true'.
 
 %%%===================================================================
 %%% Internal functions
