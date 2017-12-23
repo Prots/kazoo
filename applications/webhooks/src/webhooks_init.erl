@@ -47,7 +47,8 @@ maybe_init_account(JObj, _Props) ->
 init_master_account_db() ->
     case kapps_util:get_master_account_db() of
         {'ok', MasterAccountDb} ->
-            init_master_account_db(MasterAccountDb);
+            init_master_account_db(MasterAccountDb),
+            remove_old_notifications_webhooks(MasterAccountDb);
         {'error', _} ->
             lager:debug("master account hasn't been created yet"),
             webhooks_shared_listener:add_account_bindings()
@@ -56,6 +57,19 @@ init_master_account_db() ->
 init_master_account_db(MasterAccountDb) ->
     _ = kz_datamgr:revise_doc_from_file(MasterAccountDb, 'webhooks', <<"webhooks.json">>),
     lager:debug("loaded view into master db ~s", [MasterAccountDb]).
+
+-spec remove_old_notifications_webhooks(ne_binary()) -> 'ok'.
+remove_old_notifications_webhooks(MasterAccountDb) ->
+    ToRemove = [<<"webhooks_callflow">>
+               ,<<"webhooks_inbound_fax">>
+               ,<<"webhooks_outbound_fax">>
+               ],
+    case kz_datamgr:del_docs(MasterAccountDb, ToRemove) of
+        {'ok', _} ->
+            lager:debug("old notifications webhooks deleted");
+        {'error', _Reason} ->
+            lager:debug("failed to remove old notifications webhooks: ~p", [_Reason])
+    end.
 
 -spec init_modules() -> 'ok'.
 init_modules() ->

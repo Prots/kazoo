@@ -392,7 +392,9 @@ load_hooks(Srv) ->
             lager:debug("no configured webhooks");
         {'ok', WebHooks} ->
             {NeedMigrate, WHs} = maybe_need_migrate(WebHooks),
-            load_hooks(Srv, WHs);
+            lager:debug("~b out of ~b webhooks need to upgrade", [length(NeedMigrate), length(WHs)]),
+            load_hooks(Srv, WHs),
+            migrate_load_hook(Srv, NeedMigrate);
         {'error', 'not_found'} ->
             lager:debug("db or view not found, initializing"),
             init_webhook_db(),
@@ -409,7 +411,89 @@ init_webhook_db() ->
     'ok'.
 
 maybe_need_migrate(WebHooks) ->
+    NeedMigrate = [<<"callflow">>, <<"inbound_fax">>, <<"outbound_fax">>],
+    Fun = fun(Hook) -> lists:member(kzd_webhook:event(kz_json:get_value(<<"doc">>, Hook)), NeedMigrate) end,
+    lists:partition(Fun, WebHooks).
 
+migrate_load_hook(Srv, WebHooks) ->
+    case migrate_hooks(migrate_hooks(WebHooks, #{update => [], depend => []})) of
+        {'ok', Hooks} ->
+            _ = [load_hook(Srv, Hook) || Hook <- Hooks],
+            lager:debug("successfully migrated and loaded ~b webhooks into server ~p", [length(Hooks), Srv]);
+        {'error', _Reason} ->
+            lager:debug("failed to migrate and load webhooks: ~p", [_Reason])
+    end.
+
+migrate_hooks([], Acc) -> Acc;
+migrate_hooks([Hook|Hooks], Acc) ->
+    migrate_hooks(Hooks, migrate_hook(Hook, kzd_webhook:event(Hook), Acc)).
+
+migrate_hook(WebHook, <<"callflow">>, #{update := Update}=Acc) ->
+    Acc#{update => [set_as_notifications_webhook(WebHook, <<"callflow">>, kz_doc:id(WebHook), 'undefined', kz_doc:revision(WebHook))
+                    | Update
+                   ]
+        };
+migrate_hook(WebHook, <<"inbound_fax">>, #{update := Update, depend := Depend}=Acc) ->
+    FaxErrorId = kz_binary:rand_hex(16),
+    Acc#{update => [set_as_notifications_webhook(WebHook, <<"inbound_fax">>, kz_doc:id(WebHook), FaxErrorId, kz_doc:revision(WebHook))
+                    | Update
+                   ]
+        ,depend => [set_as_notifications_webhook(WebHook, <<"inbound_fax_error">>, FaxErrorId, kz_doc:id(WebHook), 'undefined')
+                    | Depend
+                   ]
+        };
+migrate_hook(WebHook, <<"outbound_fax">>, #{update := Update, depend := Depend}=Acc) ->
+    FaxErrorId = kz_binary:rand_hex(16),
+    Acc#{update => [set_as_notifications_webhook(WebHook, <<"outbound_fax">>, kz_doc:id(WebHook), FaxErrorId, kz_doc:revision(WebHook))
+                    | Update
+                   ]
+        ,depend => [set_as_notifications_webhook(WebHook, <<"outbound_fax_error">>, FaxErrorId, kz_doc:id(WebHook), 'undefined')
+                    | Depend
+                   ]
+        }.
+
+set_as_notifications_webhook(WebHook, Type, Id, OtherId, Rev) ->
+    kz_json:set_values([{<<"_id">>, Id}
+                       ,{<<"_rev">>, Rev}
+                       ,{<<"hook">>, <<"notifications">>}
+                       ,{<<"type">>, Type}
+                       ,{<<"other_id">>, OtherId}
+                       ]
+                      ,WebHook
+                      ).
+
+migrate_hooks(#{update := Update, depend := Depend}) ->
+    case kz_datamgr:save_docs(?KZ_WEBHOOKS_DB, Update) of
+        {'ok', JObjs} ->
+            SavedIds = saved_successfully_ids(JObjs),
+            ToSaveDepend = lists:filter(fun(JObj) ->
+                                                OtherId = kz_json:get_value(<<"other_id">>, JObj),
+                                                OtherId =/= 'undefined'
+                                                    andalso sets:is_element(OtherId, SavedIds)
+                                                    orelse OtherId =:= 'undefined'
+                                        end
+                                       ,Depend
+                                       ),
+            migrate_depend_hooks(ToSaveDepend);
+        {'error', _}=Error -> Error
+    end.
+
+%% FIXME: if the new {in,out}bound_fax notifications failed to save we have to rollback
+%%        migration, e.g. convert other_id to appropriate webhooks_{in,out}inbound_fax
+migrate_depend_hooks(WebHooks) ->
+    _ = kz_datamgr:save_docs(?KZ_WEBHOOKS_DB, WebHooks),
+    'ok'.
+
+saved_successfully_ids(JObjs) ->
+    lists:foldl(fun(JObj, Ids) ->
+                        case kz_json:get_value(<<"error">>, JObj) of
+                            'undefined' -> sets:add_element(kz_doc:id(JObj), Ids);
+                            _ -> Ids
+                        end
+                end
+               ,sets:new()
+               ,JObjs
+               ).
 
 -spec load_hooks(pid(), kz_json:objects()) -> 'ok'.
 load_hooks(Srv, WebHooks) ->

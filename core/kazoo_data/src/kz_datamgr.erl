@@ -699,6 +699,7 @@ read_chunked(Opener, DbName, DocIds, Options, Acc) ->
 read_chunked_results(_, _, _, _, {error,_}=Acc) -> Acc;
 read_chunked_results(Opener, DbName, DocIds, Options, Acc) ->
     read_chunked_results(DocIds, Opener(DbName, DocIds, Options), Acc).
+
 read_chunked_results(_DocIds, {ok, JObjs}, Acc) ->
     [JObjs | Acc];
 read_chunked_results(_DocIds, {error,_}=Reason, []) ->

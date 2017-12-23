@@ -63,7 +63,6 @@ bindings_and_responders() ->
 
 -spec bindings() -> gen_listener:bindings().
 bindings() ->
-    RestrictTo =
     [{'notifications', [{'restrict_to'
                         ,[kz_api:definition_restrict_to(Definition)
                           || Definition <- get_notifications_definition()
